@@ -1,13 +1,11 @@
-import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import type { EncryptedPayload } from "@/lib/crypto";
 import { decryptString } from "@/lib/crypto";
 import { fetchDailyOrgCosts } from "@/lib/openai/usage";
 import { evaluateCapAndNotify } from "@/lib/cap";
 
-type CronActiveKey = Prisma.ApiKeyGetPayload<{
-  select: { id: true; ciphertext: true; iv: true; tag: true };
-}>;
+type CronActiveKey = { id: string } & EncryptedPayload;
 
 type CronPerKeyResult =
   | { apiKeyId: string; ok: true; days: number }
@@ -68,7 +66,7 @@ export async function POST(req: Request) {
   const startedAt = Date.now();
 
   const perKeyResults = await mapLimit<CronActiveKey, CronPerKeyResult>(
-    keys,
+    keys as CronActiveKey[],
     5,
     async (k) => {
       try {
