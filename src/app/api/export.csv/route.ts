@@ -46,7 +46,7 @@ export async function GET(req: Request) {
 
   const lines = [
     ["date", "apiKeyId", "apiKeyName", "costUsd"].join(","),
-    ...records.map((r) =>
+    ...records.map((r: ExportCsvRow) =>
       [
         r.date.toISOString().slice(0, 10),
         r.apiKey.id,
