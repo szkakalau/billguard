@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import type { AlertChannel, AlertThreshold } from "@prisma/client";
+import type { AlertChannel, AlertThreshold } from "@/lib/prisma-types";
 
 export async function runOncePerDay(params: {
   apiKeyId: string;

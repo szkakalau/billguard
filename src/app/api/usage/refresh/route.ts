@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import type { EncryptedPayload } from "@/lib/crypto";
 import { decryptString } from "@/lib/crypto";
 import { fetchDailyOrgCosts } from "@/lib/openai/usage";
 import { evaluateCapAndNotify } from "@/lib/cap";
@@ -8,6 +9,8 @@ import { evaluateCapAndNotify } from "@/lib/cap";
 function startOfDayUtc(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
+
+type OwnedKeyWithSecret = { id: string; status: string } & EncryptedPayload;
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -19,10 +22,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const key = await prisma.apiKey.findFirst({
+  const key = (await prisma.apiKey.findFirst({
     where: { id: body.apiKeyId, userId },
     select: { id: true, status: true, ciphertext: true, iv: true, tag: true },
-  });
+  })) as OwnedKeyWithSecret | null;
   if (!key) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   if (key.status !== "active") {

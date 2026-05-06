@@ -4,6 +4,13 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { DashboardCharts } from "@/app/dashboard/DashboardCharts";
 
+/** Matches usageRecord select below (explicit when Prisma inference widens on CI). */
+type DashboardUsageRow = {
+  date: Date;
+  costUsd: unknown;
+  apiKey: { id: string; name: string };
+};
+
 export default async function DashboardPage() {
   const session = await auth();
   if (!session) redirect("/login");
@@ -12,7 +19,7 @@ export default async function DashboardPage() {
 
   const since = new Date();
   since.setDate(since.getDate() - 30);
-  const records = await prisma.usageRecord.findMany({
+  const records = (await prisma.usageRecord.findMany({
     where: {
       date: { gte: since },
       apiKey: { userId },
@@ -23,7 +30,7 @@ export default async function DashboardPage() {
       apiKey: { select: { name: true, id: true } },
     },
     orderBy: [{ date: "asc" }],
-  });
+  })) as DashboardUsageRow[];
 
   const dailyMap = new Map<string, number>();
   const byKeyMap = new Map<string, number>();

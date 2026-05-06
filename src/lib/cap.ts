@@ -3,7 +3,7 @@ import { decryptString } from "@/lib/crypto";
 import { runOncePerDay } from "@/lib/notify/dedupe";
 import { sendEmail } from "@/lib/notify/email";
 import { sendSlackWebhook } from "@/lib/notify/slack";
-import type { AlertThreshold } from "@prisma/client";
+import type { AlertThreshold } from "@/lib/prisma-types";
 
 function startOfDayUtc(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
