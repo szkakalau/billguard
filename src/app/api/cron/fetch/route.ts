@@ -1,8 +1,17 @@
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { decryptString } from "@/lib/crypto";
 import { fetchDailyOrgCosts } from "@/lib/openai/usage";
 import { evaluateCapAndNotify } from "@/lib/cap";
+
+type CronActiveKey = Prisma.ApiKeyGetPayload<{
+  select: { id: true; ciphertext: true; iv: true; tag: true };
+}>;
+
+type CronPerKeyResult =
+  | { apiKeyId: string; ok: true; days: number }
+  | { apiKeyId: string; ok: false; error: string };
 
 function unauthorized() {
   return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -58,45 +67,49 @@ export async function POST(req: Request) {
 
   const startedAt = Date.now();
 
-  const perKeyResults = await mapLimit(keys, 5, async (k) => {
-    try {
-      const apiKey = decryptString({
-        ciphertext: k.ciphertext,
-        iv: k.iv,
-        tag: k.tag,
-      });
-
-      const daily = await fetchDailyOrgCosts({
-        apiKey,
-        startTime,
-        endTime,
-        timeoutMs: 8000,
-      });
-
-      for (const d of daily) {
-        const date = startOfDayUtc(d.date);
-        await prisma.usageRecord.upsert({
-          where: { apiKeyId_date: { apiKeyId: k.id, date } },
-          create: {
-            apiKeyId: k.id,
-            date,
-            costUsd: d.costUsd,
-            raw: d.raw as never,
-          },
-          update: {
-            costUsd: d.costUsd,
-            raw: d.raw as never,
-          },
+  const perKeyResults = await mapLimit<CronActiveKey, CronPerKeyResult>(
+    keys,
+    5,
+    async (k) => {
+      try {
+        const apiKey = decryptString({
+          ciphertext: k.ciphertext,
+          iv: k.iv,
+          tag: k.tag,
         });
+
+        const daily = await fetchDailyOrgCosts({
+          apiKey,
+          startTime,
+          endTime,
+          timeoutMs: 8000,
+        });
+
+        for (const d of daily) {
+          const date = startOfDayUtc(d.date);
+          await prisma.usageRecord.upsert({
+            where: { apiKeyId_date: { apiKeyId: k.id, date } },
+            create: {
+              apiKeyId: k.id,
+              date,
+              costUsd: d.costUsd,
+              raw: d.raw as never,
+            },
+            update: {
+              costUsd: d.costUsd,
+              raw: d.raw as never,
+            },
+          });
+        }
+
+        await evaluateCapAndNotify(k.id, now);
+
+        return { apiKeyId: k.id, ok: true, days: daily.length };
+      } catch (e) {
+        return { apiKeyId: k.id, ok: false, error: (e as Error).message };
       }
-
-      await evaluateCapAndNotify(k.id, now);
-
-      return { apiKeyId: k.id, ok: true, days: daily.length };
-    } catch (e) {
-      return { apiKeyId: k.id, ok: false, error: (e as Error).message };
-    }
-  });
+    },
+  );
 
   return NextResponse.json({
     ok: true,
