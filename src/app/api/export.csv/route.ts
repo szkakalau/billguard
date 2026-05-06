@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
+/** Matches `usageRecord.findMany` select below (explicit for CI where Prisma inference can widen). */
+type ExportCsvRow = {
+  date: Date;
+  costUsd: unknown;
+  apiKey: { id: string; name: string };
+};
+
 function csvEscape(s: string) {
   // Prevent CSV formula injection in common spreadsheet apps
   if (/^[=+\-@]/.test(s)) s = `'${s}`;
@@ -21,7 +28,7 @@ export async function GET(req: Request) {
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  const records = await prisma.usageRecord.findMany({
+  const records = (await prisma.usageRecord.findMany({
     where: {
       date: { gte: since },
       apiKey: {
@@ -35,7 +42,7 @@ export async function GET(req: Request) {
       costUsd: true,
       apiKey: { select: { id: true, name: true } },
     },
-  });
+  })) as ExportCsvRow[];
 
   const lines = [
     ["date", "apiKeyId", "apiKeyName", "costUsd"].join(","),
